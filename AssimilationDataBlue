@@ -1,0 +1,223 @@
+#!/usr/bin/env python
+
+import random
+import numpy
+import numpy as np
+from numpy.linalg import inv
+
+# Variaveis iniciais
+n = 3
+p = 4
+rSupim = 0.5
+rOBS = 0.01
+totalExperimentos = 200
+
+#xt_linear =  [0 for x in range(n*n)] 
+xt_linear = np.zeros(n*n)
+xb = [[0 for x in range(n)] for x in range(n)] 
+#xb_linear =  [0 for x in range(n*n)] 
+xb_linear = np.zeros(n*n)
+xa_linear = np.zeros(n*n)
+obs =  [0 for x in range(p)] 
+obsX =  [0 for x in range(p)] 
+obsY =  [0 for x in range(p)]
+H = np.zeros((p, n*n))
+#H = [[0 for x in range(n*n)] for x in range(p)] 
+B = [[0 for x in range(n*n)] for x in range(n*n)] 
+#B = np.zeros((n*n, n*n))
+R = np.zeros((p, p))
+
+def imprime():
+	global xt 
+	print "XT: ", xt_linear, "\n"
+	print "XB: ", xb_linear, "\n"
+	print "ObsX: ", obsX, "\n"
+	print "ObsY: ", obsY, "\n"
+	print "Obs: ", obs, "\n"
+	print "XA: ", xa_linear, "\n\n"
+
+# Construcao XT, XB e OBS
+def buildMatrix():
+	
+	# Xb, xb_linear, xt_linear
+	ind_linear = 0
+	for i in range (0, n):
+		for j in range (0, n):	
+			xb[i][j] = (random.random() * (rSupim*2) - rSupim) + xt[i][j]
+			xb_linear[ind_linear] = xb[i][j]
+			xt_linear[ind_linear] = xt[i][j]
+			ind_linear = ind_linear + 1
+			
+	# obs
+	for i in range (0, p):
+		obsX[i] = random.randint(0, (n-1))
+		obsY[i] = random.randint(0, (n-1))
+		obs[i] = (random.random() * (rSupim*2) - rSupim) + xt[obsX[i]][obsY[i]]
+	
+def buildH():
+	soma =  [0 for x in range(p)] 
+	indColuna = 0
+	distancia = 0
+
+	for i in range (0,p):
+		soma[i] = 0
+
+	for indObs in range (0,p):	
+		for indX in range (0, n):
+			for indY in range (0,n):
+				distancia = ((obsX[indObs] - indX)**2.0) + ((obsY[indObs] - indY)**2.0)
+				distancia = distancia**(1/2.0)
+				if distancia == 0:
+					H[indObs][indColuna] = 1**(300.0)
+				else:
+					H[indObs][indColuna] = (1.0/distancia)**(10.0)
+				soma[indObs] = soma[indObs] + H[indObs][indColuna]
+				indColuna = indColuna + 1
+		indColuna = 0
+	
+	for indObs in range (0, p):
+		soma_aux = 0
+		for ind in range (0, n*n):
+			H[indObs][ind] = H[indObs][ind]/soma[indObs]
+
+def buildB():
+	global B
+	tempXbLinear =  [0 for x in range(n*n)] 
+	aux2 =  [0 for x in range(n*n)]
+	diferencaB = [[0 for x in range(totalExperimentos)] for x in range(n*n)] 
+
+	vetorAux = np.zeros(n*n)
+	mediaB = np.zeros(n*n)
+
+	# Matriz Diferenca
+	for indErros in range (0, totalExperimentos):
+		# Constroi vetor xb_linear temporario	
+		for ind in range (0, (n*n)):
+			tempXbLinear[ind] =  (random.random() * (rSupim*2) - rSupim) + xt_linear[ind]
+		# Diferenca
+		for ind in range (0, (n*n)):
+			diferencaB[ind][indErros] = tempXbLinear[ind] - xt_linear[ind]	
+		
+	# Media B	
+	for ind in range (0, n*n):
+		aux = 0
+		for indErros in range (0, totalExperimentos):
+			aux = aux + diferencaB[ind][indErros]
+		mediaB[ind] = aux / totalExperimentos
+	
+	# Matriz B
+	for indErros in range (0, totalExperimentos):
+		for ind in range (0, (n*n)):
+			vetorAux[ind] = diferencaB[ind][indErros]
+		aux = np.array([vetorAux - mediaB])
+		aux2 = aux.transpose()
+		B = B + (aux * aux2)
+	B = B / totalExperimentos
+
+def buildR():
+	global R
+	tempObs =  [0 for x in range(p)] 	
+	diferencaR = [[0 for x in range(totalExperimentos)] for x in range(p)] 
+	mediaR = np.zeros(p)
+	vetor = np.zeros(p)
+
+
+	aux_xt_linear = numpy.matrix(xt_linear) # Preciso transformar em matrix para conseguir inverter
+	truth_nas_obs = H * aux_xt_linear.transpose()
+
+	print "Tamanho H: ", H, "\n\nXt_linear: ", xt_linear.T
+	print "Truth: ", truth_nas_obs, "\n\n"
+
+	# Diferenca	
+	for indErros in range (0, totalExperimentos):
+		for ind in range (0, p):
+			tempObs[ind] = (random.random() * (rSupim*2) - rSupim) + xt[obsX[ind]][obsY[ind]]
+		for ind in range (0, p):
+			diferencaR[ind][indErros] = tempObs[ind] - truth_nas_obs[ind]
+			#print "TEMPOOBS: ", tempObs[ind], "  Truth: ", truth_nas_obs[ind], "\n"
+
+	# Media Erros
+	for ind in range (0, p):
+		aux = 0
+		for indErros in range (0, totalExperimentos):
+			aux = aux + diferencaR[ind][indErros]
+		mediaR[ind] = aux / totalExperimentos
+
+	# Matriz R
+	for indErros in range (0, totalExperimentos):
+		for ind in range (0, p):
+			vetor[ind] = diferencaR[ind][indErros]
+		aux = np.array([vetor - mediaR])		
+		aux = vetor - mediaR
+		aux2 = np.array([aux])
+		aux2 = aux.transpose()	
+		R = R + (aux*aux2)
+	R = R / totalExperimentos
+
+def calculosFinais(): 
+	global H, B
+	print "R: ", R, " R(SIZE): ", R.shape, "\n\n"
+	print "B: ", B, "\n\n"
+	print "H: ", H, "\n\n\n"
+
+	HBH_T = np.zeros((p, n*n))
+	#Hxb = np.zeros((1, p))
+
+	H_aux = np.matrix(H)
+	B_aux = np.matrix(B)
+	xb_linear_aux = np.matrix(xb_linear)
+
+	HBH_T = H_aux * B_aux
+	HBH_T = HBH_T * H.transpose()
+
+	BH_T = B_aux * H_aux.transpose()
+	
+	Hxb = H_aux * xb_linear_aux.transpose()
+
+	K_aux = HBH_T + R
+	K_inv = np.matrix(K_aux)
+
+	K_inv = inv(K_inv)
+
+	K = np.matrix(BH_T)
+	K =  BH_T * K_inv
+
+	inovacao = K * (obs - Hxb)
+
+	obs_aux = np.matrix(obs)
+	#print "K = ", K
+	#print "\n\n obs: ", obs_aux.T
+	#print "Hxb: ", Hxb
+	#print "K_inv * BH_T: ", K * (obs_aux.transpose() - Hxb)
+	inovacao = K * (obs_aux.transpose() - Hxb)
+	xb_linear_aux = np.matrix(xb_linear)
+	xa_linear = xb_linear_aux.transpose() + inovacao
+	#print "B: ", B[2][1]
+	#print "\n\n H: ", H.shape #.transpose() * B 
+	#print "\n\n B: ", B.shape	
+	#print "\n\n H: ", H.transpose() * B
+	#HBH_T = H * B
+
+	print "XA: ", xa_linear.T, "\n\n"
+
+## Inicio		
+xt = numpy.random.random((n, n)) # Cria xt
+buildMatrix()
+buildH()
+buildH()
+buildB()
+buildR()
+calculosFinais()
+imprime()
+
+#for i in range (0, 10):
+#	for j in range (0,10):
+#		nums[i][j] = range(10)
+
+#ainv = inv(nums)
+#print(ainv)
+
+#print(x)
+#ainv = inv(x)
+
+#print(ainv)
